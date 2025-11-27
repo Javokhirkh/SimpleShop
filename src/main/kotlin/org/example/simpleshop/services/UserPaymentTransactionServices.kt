@@ -1,118 +1,98 @@
 package org.example.simpleshop.services
 
+import jakarta.transaction.Transactional
 import org.example.simpleshop.PaymentTransactionNotFoundException
 import org.example.simpleshop.User
 import org.example.simpleshop.UserNotFoundException
 import org.example.simpleshop.UserPaymentTransaction
+import org.example.simpleshop.UserPaymentTransactionMapper
 import org.example.simpleshop.UserPaymentTransactionRepository
 import org.example.simpleshop.UserRepository
 import org.example.simpleshop.dtoes.UserPaymentTransactionRequestDto
-import org.example.simpleshop.dtoes.UserPaymentTransactionResponseDto
-import org.example.simpleshop.dtoes.UserResponseDto
+import org.example.simpleshop.dtoes.UserPaymentTransactionResponseFullInformation
+import org.example.simpleshop.dtoes.UserPaymentTransactionShortResponse
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import java.math.BigDecimal
 import java.time.LocalDate
 
 interface UserPaymentTransactionService {
-    fun createPaymentTransaction(dto: UserPaymentTransactionRequestDto): UserPaymentTransactionResponseDto
-    fun getPaymentTransactionById(id: Long): UserPaymentTransactionResponseDto
-    fun getAllPaymentTransactions(): List<UserPaymentTransactionResponseDto>
-    fun getAllPaymentTransactionsPaginated(pageable: Pageable): Page<UserPaymentTransactionResponseDto>
-    fun getPaymentTransactionsByUserId(userId: Long): List<UserPaymentTransactionResponseDto>
-    fun getPaymentTransactionsByUserIdPaginated(userId: Long, pageable: Pageable): Page<UserPaymentTransactionResponseDto>
-    fun getPaymentTransactionsByDate(date: LocalDate): List<UserPaymentTransactionResponseDto>
-    fun getPaymentTransactionsByDateRange(startDate: LocalDate, endDate: LocalDate): List<UserPaymentTransactionResponseDto>
-    fun getPaymentTransactionsByDateRangePaginated(startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<UserPaymentTransactionResponseDto>
-    fun getTotalPaymentByUserId(userId: Long): java.math.BigDecimal
-    fun updatePaymentTransaction(id: Long, dto: UserPaymentTransactionRequestDto): UserPaymentTransactionResponseDto
-    fun deletePaymentTransaction(id: Long): Boolean
+    fun createPaymentTransaction(dto: UserPaymentTransactionRequestDto)
+    fun getPaymentTransactionById(id: Long): UserPaymentTransactionResponseFullInformation
+    fun getAllPaymentTransactionsPaginated(pageable: Pageable): Page<UserPaymentTransactionShortResponse>
+    fun getPaymentTransactionsByUserIdPaginated(userId: Long, pageable: Pageable): Page<UserPaymentTransactionShortResponse>
+    fun getPaymentTransactionsByDatePaginated(date: LocalDate,pageable:Pageable): Page<UserPaymentTransactionShortResponse>
+    fun getPaymentTransactionsByDateRangePaginated(startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<UserPaymentTransactionShortResponse>
+    fun getTotalPaymentByUserId(userId: Long): BigDecimal
+    fun deletePaymentTransaction(id: Long)
 }
 
 @Service
 class UserPaymentTransactionServiceImpl(
     private val userPaymentTransactionRepository: UserPaymentTransactionRepository,
     private val userRepository: UserRepository,
+    private val mapper: UserPaymentTransactionMapper
 ) : UserPaymentTransactionService {
-
-    override fun createPaymentTransaction(dto: UserPaymentTransactionRequestDto): UserPaymentTransactionResponseDto {
-        val user = userRepository.findByIdAndDeletedFalse(dto.userId)
-            ?: throw UserNotFoundException()
-        return userPaymentTransactionRepository.save(dto.toEntity(user)).toPaymentTransactionResponse()
-    }
-
-    override fun getPaymentTransactionById(id: Long): UserPaymentTransactionResponseDto =
-        userPaymentTransactionRepository.findByIdAndDeletedFalse(id)
-            ?.toPaymentTransactionResponse()
-            ?: throw PaymentTransactionNotFoundException()
-
-    override fun getAllPaymentTransactions(): List<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findAllNotDeleted().map { it.toPaymentTransactionResponse() }
-
-    override fun getAllPaymentTransactionsPaginated(pageable: Pageable): Page<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findAllNotDeleted(pageable).map { it.toPaymentTransactionResponse() }
-
-    override fun getPaymentTransactionsByUserId(userId: Long): List<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findByUserIdAndDeletedFalse(userId).map { it.toPaymentTransactionResponse() }
-
-    override fun getPaymentTransactionsByUserIdPaginated(userId: Long, pageable: Pageable): Page<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findByUserIdAndDeletedFalse(userId, pageable).map { it.toPaymentTransactionResponse() }
-
-    override fun getPaymentTransactionsByDate(date: LocalDate): List<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findByDateAndDeletedFalse(date).map { it.toPaymentTransactionResponse() }
-
-    override fun getPaymentTransactionsByDateRange(startDate: LocalDate, endDate: LocalDate): List<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findByDateBetweenAndDeletedFalse(startDate, endDate).map { it.toPaymentTransactionResponse() }
-
-    override fun getPaymentTransactionsByDateRangePaginated(startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<UserPaymentTransactionResponseDto> =
-        userPaymentTransactionRepository.findByDateBetweenAndDeletedFalse(startDate, endDate, pageable).map { it.toPaymentTransactionResponse() }
-
-    override fun getTotalPaymentByUserId(userId: Long): java.math.BigDecimal =
-        userPaymentTransactionRepository.findByUserIdAndDeletedFalse(userId)
-            .fold(java.math.BigDecimal.ZERO) { acc, payment -> acc + payment.amount }
-
-    override fun updatePaymentTransaction(id: Long, dto: UserPaymentTransactionRequestDto): UserPaymentTransactionResponseDto {
-        val paymentTransaction = userPaymentTransactionRepository.findByIdAndDeletedFalse(id)
-            ?: throw PaymentTransactionNotFoundException()
-        val user = userRepository.findByIdAndDeletedFalse(dto.userId)
+    @Transactional
+    override fun createPaymentTransaction(dto: UserPaymentTransactionRequestDto) {
+        val user: User = userRepository.findByIdAndDeletedFalse(dto.userId)
             ?: throw UserNotFoundException()
 
-        paymentTransaction.user = user
-        paymentTransaction.amount = dto.amount
-        paymentTransaction.date = dto.date
-
-        return userPaymentTransactionRepository.save(paymentTransaction).toPaymentTransactionResponse()
+        val paymentTransaction = mapper.toEntity(user, dto.amount)
+        user.balance += dto.amount
+        userRepository.save(user)
+        userPaymentTransactionRepository.save(paymentTransaction)
     }
 
-    override fun deletePaymentTransaction(id: Long): Boolean =
-        userPaymentTransactionRepository.trash(id) != null
+    override fun getPaymentTransactionById(id: Long): UserPaymentTransactionResponseFullInformation {
+        val transaction: UserPaymentTransaction = userPaymentTransactionRepository.findByIdAndDeletedFalse(id)
+            ?: throw PaymentTransactionNotFoundException()
+        return mapper.toFullInformation(transaction)
+    }
 
-    private fun UserPaymentTransactionRequestDto.toEntity(user: User) = UserPaymentTransaction(
-        user = user,
-        amount = this.amount,
-        date = this.date,
-    )
+    override fun getAllPaymentTransactionsPaginated(pageable: Pageable): Page<UserPaymentTransactionShortResponse> {
+        val transactions = userPaymentTransactionRepository.findAllNotDeleted(pageable)
+        return transactions.map { mapper.toShortResponse(it) }
+    }
 
-    private fun UserPaymentTransaction.toPaymentTransactionResponse() = UserPaymentTransactionResponseDto(
-        id = requireNotNull(this.id) { "UserPaymentTransaction id cannot be null" },
-        user = this.user.toUserResponse(),
-        amount = this.amount,
-        date = this.date,
-        createdDate = this.createdDate,
-        modifiedDate = this.modifiedDate,
-        createdBy = this.createdBy,
-        lastModifiedBy = this.lastModifiedBy,
-    )
+    override fun getPaymentTransactionsByUserIdPaginated(
+        userId: Long,
+        pageable: Pageable
+    ): Page<UserPaymentTransactionShortResponse> {
+        val user=userRepository.findByIdAndDeletedFalse(userId)
+            ?:throw UserNotFoundException()
+        val transactions = userPaymentTransactionRepository.findAllByUserAndDeletedFalse(user, pageable)
+        return transactions.map { mapper.toShortResponse(it) }
+    }
 
-    private fun User.toUserResponse() = UserResponseDto(
-        id = this.id,
-        username = this.username,
-        fullName = this.fullName,
-        balance = this.balance,
-        userRole = this.userRole,
-        createdDate = this.createdDate,
-        modifiedDate = this.modifiedDate,
-        createdBy = this.createdBy,
-        lastModifiedBy = this.lastModifiedBy,
-    )
+    override fun getPaymentTransactionsByDatePaginated(
+        date: LocalDate,
+        pageable: Pageable
+    ): Page<UserPaymentTransactionShortResponse> {
+        val transactions = userPaymentTransactionRepository.findAllByDateAndDeletedFalse(date, pageable)
+        return transactions.map { mapper.toShortResponse(it) }
+    }
+
+    override fun getPaymentTransactionsByDateRangePaginated(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        pageable: Pageable
+    ): Page<UserPaymentTransactionShortResponse> {
+        val transactions = userPaymentTransactionRepository.findAllByDateRangeAndDeletedFalse(startDate, endDate, pageable)
+        return transactions.map { mapper.toShortResponse(it) }
+    }
+
+    override fun getTotalPaymentByUserId(userId: Long): BigDecimal {
+        val user=userRepository.findByIdAndDeletedFalse(userId)
+            ?:throw UserNotFoundException()
+        val transactions = userPaymentTransactionRepository.findAllByUserAndDeletedFalse(user, Pageable.unpaged())
+        return transactions.content.fold(BigDecimal.ZERO) { acc, transaction -> acc + transaction.amount }
+    }
+    @Transactional
+    override fun deletePaymentTransaction(id: Long) {
+        userPaymentTransactionRepository.trash(id) ?: throw PaymentTransactionNotFoundException()
+    }
+
+
 }

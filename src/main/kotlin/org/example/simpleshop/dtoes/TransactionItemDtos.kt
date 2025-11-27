@@ -1,25 +1,24 @@
 package org.example.simpleshop.dtoes
 
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import org.example.simpleshop.Product
+import org.example.simpleshop.Transaction
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-data class TransactionItemRequestDto(
-    val productId: Long,
-    val count: Long,
-    val amount: BigDecimal,
-    val totalAmount: BigDecimal,
-    val transactionId: Long,
+data class TransactionItemRequest(
+    @get:NotBlank(message = "INVALID_USER_ID")val productId: Long,
+    @get:Min(1, message = "INVALID_QUANTITY")val count: Long,
+    @get:Min(0, message = "INVALID_PRODUCT_PRICE")val amount: BigDecimal
 )
 
-data class TransactionItemResponseDto(
+data class TransactionItemResponse(
     val id: Long,
-    val product: ProductResponseDto,
-    val count: Long,
-    val amount: BigDecimal,
-    val totalAmount: BigDecimal,
-    val transaction: TransactionResponseDto,
-    val createdDate: LocalDateTime?,
-    val modifiedDate: LocalDateTime?,
-    val createdBy: String?,
-    val lastModifiedBy: String?,
+    val product: Product,
+    val quantity: Long,
+    val transaction: Transaction,
+    val pricePerUnit: BigDecimal,
+    val totalPrice: BigDecimal,
+    val createdAt: LocalDateTime?,
 )

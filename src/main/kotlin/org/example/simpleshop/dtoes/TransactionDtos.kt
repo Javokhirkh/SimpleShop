@@ -6,17 +6,20 @@ import java.time.LocalDateTime
 
 data class TransactionRequestDto(
     val userId: Long,
-    val totalAmount: BigDecimal,
-    val date: LocalDate,
+    val items:List<TransactionItemRequest>,
 )
 
-data class TransactionResponseDto(
+data class TransactionShortResponse(
     val id: Long,
-    val user: UserResponseDto,
+    val user: UserShortResponse,
     val totalAmount: BigDecimal,
-    val date: LocalDate,
     val createdDate: LocalDateTime?,
-    val modifiedDate: LocalDateTime?,
-    val createdBy: String?,
-    val lastModifiedBy: String?,
+)
+
+data class TransactionFullResponse(
+    val id: Long,
+    val user: UserShortResponse,
+    val totalAmount: BigDecimal,
+    val createdDate: LocalDateTime?,
+    val items:List<TransactionItemResponse>,
 )

@@ -11,7 +11,9 @@ import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import jakarta.persistence.EntityManager
 import org.springframework.data.jpa.domain.Specification
+import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.findByIdOrNull
+import org.springframework.data.repository.query.Param
 import java.time.LocalDate
 
 @NoRepositoryBean
@@ -51,100 +53,47 @@ class BaseRepositoryImpl<T : BaseEntity>(
 }
 
 @Repository
-interface CategoryRepository : BaseRepository<Category>, CustomCategoryRepository {
-    override fun findByNameAndDeletedFalse(name: String): Category?
-
-    override fun findAllByDeletedFalseOrderByOrder(): List<Category>
+interface CategoryRepository : BaseRepository<Category>{
+    fun existsByName(name: String)
+    fun findAllByOrderByNameAsc(pageable: Pageable):Page<Category>
+    @Query("select c from Category c where c.name = :name and c.id != :id and c.deleted = false")
+    fun existsByNameAndNotEqualId(@Param("name") name: String, @Param("id") id: Long): Category?
 }
 
 @Repository
 interface ProductRepository : BaseRepository<Product> {
-    fun findByNameAndDeletedFalse(name: String): List<Product>
-
-    fun findByCategoryIdAndDeletedFalse(categoryId: Long): List<Product>
-
-    fun findByCategoryIdAndDeletedFalse(categoryId: Long, pageable: Pageable): Page<Product>
-
-    fun findByCountGreaterThanAndDeletedFalse(count: Long): List<Product>
+    @Query("select p from Product p where p.category = :category and p.deleted = false")
+    fun findAllByCategoryAndDeletedFalse(@Param("category") category: Category, pageable: Pageable): Page<Product>
 }
 
 @Repository
 interface UserRepository : BaseRepository<User> {
-    fun findByUsernameAndDeletedFalse(username: String): User?
-
-    fun findByFullNameAndDeletedFalse(fullName: String): User?
-    fun existsByUsername(username: String): Boolean
+    fun findByUsername(username: String): User?
 }
 
 @Repository
 interface TransactionRepository : BaseRepository<Transaction> {
-    fun findByUserIdAndDeletedFalse(userId: Long): List<Transaction>
-
-    fun findByUserIdAndDeletedFalse(userId: Long, pageable: Pageable): Page<Transaction>
-
-    fun findByDateAndDeletedFalse(date: LocalDate): List<Transaction>
-
-    fun findByDateBetweenAndDeletedFalse(startDate: LocalDate, endDate: LocalDate): List<Transaction>
-
-    fun findByDateBetweenAndDeletedFalse(startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<Transaction>
+    @Query("select t from Transaction t where t.user.id = :userId and t.deleted = false")
+    fun findAllByUserIdAndDeletedFalse(@Param("userId") userId: Long, pageable: Pageable): Page<Transaction>
 }
 
 @Repository
 interface TransactionItemRepository : BaseRepository<TransactionItem> {
-    fun findByTransactionIdAndDeletedFalse(transactionId: Long): List<TransactionItem>
-
-    fun findByProductIdAndDeletedFalse(productId: Long): List<TransactionItem>
-
-    fun findByProductIdAndDeletedFalse(productId: Long, pageable: Pageable): Page<TransactionItem>
+    @Query("select ti from TransactionItem ti where ti.transaction.id = :transactionId and ti.deleted = false")
+    fun findAllByTransactionIdAndDeletedFalse(@Param("transactionId") transactionId: Long): List<TransactionItem>
 }
 
 @Repository
 interface UserPaymentTransactionRepository : BaseRepository<UserPaymentTransaction> {
-    fun findByUserIdAndDeletedFalse(userId: Long): List<UserPaymentTransaction>
+    fun findAllByUserAndDeletedFalse(user: User, pageable: Pageable): Page<UserPaymentTransaction>
 
-    fun findByUserIdAndDeletedFalse(userId: Long, pageable: Pageable): Page<UserPaymentTransaction>
+    @Query("select upt from UserPaymentTransaction upt where cast(upt.createdDate as date) = :date and upt.deleted = false")
+    fun findAllByDateAndDeletedFalse(@Param("date") date: LocalDate, pageable: Pageable): Page<UserPaymentTransaction>
 
-    fun findByDateAndDeletedFalse(date: LocalDate): List<UserPaymentTransaction>
-
-    fun findByDateBetweenAndDeletedFalse(startDate: LocalDate, endDate: LocalDate): List<UserPaymentTransaction>
-
-    fun findByDateBetweenAndDeletedFalse(startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<UserPaymentTransaction>
-}
-
-@NoRepositoryBean
-interface CustomCategoryRepository {
-    fun findByNameAndDeletedFalse(name: String): Category?
-
-    fun findAllByDeletedFalseOrderByOrder(): List<Category>
-}
-
-class CustomCategoryRepositoryImpl(
-    private val entityManager: EntityManager,
-) : CustomCategoryRepository {
-
-    override fun findByNameAndDeletedFalse(name: String): Category? {
-        val cb = entityManager.criteriaBuilder
-        val query = cb.createQuery(Category::class.java)
-        val root = query.from(Category::class.java)
-
-        query.where(
-            cb.and(
-                cb.equal(root.get<String>("name"), name),
-                cb.equal(root.get<Boolean>("deleted"), false)
-            )
-        )
-
-        return entityManager.createQuery(query).resultList.firstOrNull()
-    }
-
-    override fun findAllByDeletedFalseOrderByOrder(): List<Category> {
-        val cb = entityManager.criteriaBuilder
-        val query = cb.createQuery(Category::class.java)
-        val root = query.from(Category::class.java)
-
-        query.where(cb.equal(root.get<Boolean>("deleted"), false))
-        query.orderBy(cb.asc(root.get<Long>("order")))
-
-        return entityManager.createQuery(query).resultList
-    }
+    @Query("select upt from UserPaymentTransaction upt where cast(upt.createdDate as date) between :startDate and :endDate and upt.deleted = false")
+    fun findAllByDateRangeAndDeletedFalse(
+        @Param("startDate") startDate: LocalDate,
+        @Param("endDate") endDate: LocalDate,
+        pageable: Pageable
+    ): Page<UserPaymentTransaction>
 }

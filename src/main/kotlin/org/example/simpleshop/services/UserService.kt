@@ -1,87 +1,71 @@
 package org.example.simpleshop.services
 
-import org.example.simpleshop.User
+import jakarta.transaction.Transactional
 import org.example.simpleshop.UserAlreadyExistsException
+import org.example.simpleshop.UserMapper
 import org.example.simpleshop.UserNotFoundException
 import org.example.simpleshop.UserRepository
+import org.example.simpleshop.dtoes.UserFullInformation
 import org.example.simpleshop.dtoes.UserRequestDto
-import org.example.simpleshop.dtoes.UserResponseDto
+import org.example.simpleshop.dtoes.UserShortResponse
+import org.example.simpleshop.dtoes.UserUpdateRequest
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 
-
 interface UserService {
-    fun createUser(user: UserRequestDto) : UserResponseDto
-    fun getUserById(id: Long) : UserResponseDto
-    fun getAllUsers() : Page<UserResponseDto>
-    fun updateUser(id: Long, user: UserRequestDto) : UserResponseDto
+    fun createUser(user: UserRequestDto)
+    fun getUserById(id: Long) : UserFullInformation
+    fun getAllUsers(pageable: Pageable) : Page<UserShortResponse>
+    fun updateUser(id: Long, user: UserUpdateRequest)
     fun deleteUser(id: Long)
 }
 
 @Service
 class UserServiceImpl(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val userMapper: UserMapper
 ) : UserService {
-    override fun createUser(user: UserRequestDto): UserResponseDto {
-        if(userRepository.existsByUsername(user.username)) {
-            throw UserAlreadyExistsException("Username already exists")
+    @Transactional
+    override fun createUser(user: UserRequestDto) {
+        userRepository.findByUsername(user.username)?.let {
+            throw UserAlreadyExistsException(user.username)
+        } ?: run {
+            val newUser = userMapper.toEntity(user)
+            userRepository.save(newUser)
         }
-        return userRepository.save(user.toEntity()).toUserResponse()
     }
 
-    override fun getUserById(id: Long): UserResponseDto {
-        val user = userRepository.findById(id)
-            .orElseThrow { UserNotFoundException() }
-        return user.toUserResponse()
+    override fun getUserById(id: Long): UserFullInformation {
+        val user = userRepository.findByIdAndDeletedFalse(id)
+            ?: throw UserNotFoundException()
+        return userMapper.toFullInformation(user)
     }
 
-    override fun getAllUsers(): Page<UserResponseDto> {
-        return userRepository.findAll().map { it.toUserResponse() } as Page<UserResponseDto>
+    override fun getAllUsers(pageable: Pageable): Page<UserShortResponse> {
+        val users = userRepository.findAllNotDeleted(pageable)
+        return users.map { userMapper.toShortResponse(it) }
+    }
+    @Transactional
+    override fun updateUser(id: Long, user: UserUpdateRequest) {
+        val existingUser = userRepository.findByIdAndDeletedFalse(id)
+            ?: throw UserNotFoundException()
+
+        existingUser.apply {
+            username = user.username ?: username
+            fullName = user.fullName ?: fullName
+            userRole = user.userRole ?: userRole
+        }
+
+        userRepository.save(existingUser)
     }
 
-    override fun updateUser(
-        id: Long,
-        user: UserRequestDto
-    ): UserResponseDto {
-        val existingUser = userRepository.findById(id)
-            .orElseThrow { UserNotFoundException() }
-
-        val updatedUser = User(
-            username = user.username,
-            fullName = user.fullName,
-            balance = user.balance,
-            userRole = user.userRole,
-        )
-
-
-        return userRepository.save(updatedUser).toUserResponse()
-    }
-
+    @Transactional
     override fun deleteUser(id: Long) {
-        val user = userRepository.findById(id)
-            .orElseThrow { UserNotFoundException() }
+        val user = userRepository.findByIdAndDeletedFalse(id)
+            ?: throw UserNotFoundException()
         userRepository.trash(id)
     }
-    private fun UserRequestDto.toEntity(): User {
-        return User(
-            username = this.username,
-            fullName = this.fullName,
-            balance = this.balance,
-            userRole = this.userRole
-        )
 
-    }
-    private fun User.toUserResponse(): UserResponseDto {
-        return UserResponseDto(
-            id = this.id,
-            username = this.username,
-            fullName = this.fullName,
-            balance = this.balance,
-            userRole = this.userRole,
-            createdDate = this.createdDate,
-            modifiedDate = this.modifiedDate,
-            createdBy = this.createdBy,
-            lastModifiedBy = this.lastModifiedBy
-        )
-    }
+
 }

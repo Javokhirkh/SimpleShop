@@ -152,14 +152,6 @@ class InvalidUsernameException(
     override fun getErrorMessageArguments() = arrayOf(username)
 }
 
-class InsufficientUserBalanceException(
-    private val username: String,
-    private val required: java.math.BigDecimal,
-    private val available: java.math.BigDecimal,
-) : ShopAppException("User: $username required: $required, available: $available") {
-    override fun errorType() = ErrorCode.INSUFFICIENT_USER_BALANCE
-    override fun getErrorMessageArguments() = arrayOf(username, required, available)
-}
 
 class UserNotAdminException(
     private val username: String,
@@ -236,4 +228,10 @@ class InternalServerErrorException(
 ) : ShopAppException(message) {
     override fun errorType() = ErrorCode.INTERNAL_SERVER_ERROR
     override fun getErrorMessageArguments() = arrayOf(message)
+}
+class InvalidCategoryNameException(
+    private val categoryName: String,
+) : ShopAppException("Invalid category name: $categoryName") {
+    override fun errorType() = ErrorCode.CATEGORY_ALREADY_EXISTS
+    override fun getErrorMessageArguments() = arrayOf(categoryName)
 }
